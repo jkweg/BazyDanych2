@@ -244,7 +244,34 @@ w szczególności dokumenty: `10_modyf_ora_north.pdf`, `20_ora_plsql_north.pdf`
 
 ```sql
 
--- przyklady, kod, zrzuty ekranów, komentarz ...
+1. Działanie transakcji (COMMIT i ROLLBACK)
+Transakcje w bazach danych opierają się na właściwościach ACID  
+(niepodzielność, spójność, izolacja, trwałość) . W systemie Oracle po   
+wykonaniu operacji modyfikujących dane (DML), zmiany nie są od razu widoczne dla innych użytkowników.
+
+Polecenie commit trwale zatwierdza transakcję w bazie danych.
+
+Polecenie rollback zrywa i wycofuje wszystkie niezazatwierdzone zmiany,   
+przywracając stan sprzed rozpoczęcia transakcji.
+
+-- Test ROLLBACK
+insert into person(firstname, lastname) values ('Adam', 'Testowy');
+rollback; -- Wiersz wycofany
+![]
+-- Test COMMIT
+insert into person(firstname, lastname) values ('Ewa', 'Zatwierdzona');
+commit; -- Wiersz zostaje trwale zapisany
+
+
+2. Błędy podczas wykonywania transakcji
+
+Jeśli wykonujemy serię niezależnych instrukcji INSERT i w jednej z nich  
+wystąpi błąd (np. próba wstawienia wartości NULL, co generuje błąd ORA-01400) , ta konkretna operacja jest odrzucana.   
+Jednak inne, poprawne instrukcje wykonane w tej samej sesji mogą zostać trwale zapisane, jeśli na końcu wykonamy commit.  
+Inaczej zachowuje się kod umieszczony w bloku anonimowym PL/SQL (struktura declare, begin, exception, end;) .  
+Wystąpienie błędu w sekcji wykonawczej przerywa działanie bloku i przechodzi do obsługi wyjątków . Żaden błędny wiersz nie zostaje dopisany.
+
+
 
 ```
 
@@ -272,59 +299,8 @@ Proponowany zestaw widoków można rozbudować wedle uznania/potrzeb
 
 # Zadanie 1 - rozwiązanie
 
-
-Widok `vw_reservation` 
 ```sql
-CREATE OR REPLACE VIEW vw_reservation AS
-SELECT
-  r.reservation_id,
-  t.country,
-  t.trip_date,
-  t.trip_name,
-  p.firstname,
-  p.lastname,
-  r.status,
-  t.trip_id,
-  p.person_id
-FROM reservation r
-       JOIN trip t ON r.trip_id = t.trip_id
-       JOIN person p ON r.person_id = p.person_id;
 ```
-Wizualizacja wyników dla powyższego widoku:
-![widok_drugi](images/vw_reservation.png)
-
----
-
-Widok `vw_trip`
-```sql
-CREATE OR REPLACE VIEW vw_trip AS
-SELECT
-  t.trip_id,
-  t.country,
-  t.trip_date,
-  t.trip_name,
-  t.max_no_places,
-  (t.max_no_places - (SELECT COUNT(*)
-                      FROM reservation r
-                      WHERE r.trip_id = t.trip_id
-                        AND r.status != 'C')) AS no_available_places
-FROM trip t;
-```
-Wizualizacja wyników dla powyższego widoku:
-![widok_drugi](images/vw_trip.png)
-
----
-
-Widok `vw_available_trip`
-```sql
-CREATE OR REPLACE VIEW vw_available_trip AS
-SELECT *
-FROM vw_trip
-WHERE trip_date > CURRENT_DATE AND no_available_places > 0;
-```
-
-Wizualizacja wyników dla powyższego widoku:
-![widok_trzeci](images/vw_available_trip.png)
 
 ---
 
