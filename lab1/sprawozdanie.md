@@ -272,13 +272,59 @@ Proponowany zestaw widoków można rozbudować wedle uznania/potrzeb
 
 # Zadanie 1 - rozwiązanie
 
+
+Widok `vw_reservation` 
 ```sql
-
--- wyniki, kod, zrzuty ekranów, komentarz ...
-
-
-
+CREATE OR REPLACE VIEW vw_reservation AS
+SELECT
+  r.reservation_id,
+  t.country,
+  t.trip_date,
+  t.trip_name,
+  p.firstname,
+  p.lastname,
+  r.status,
+  t.trip_id,
+  p.person_id
+FROM reservation r
+       JOIN trip t ON r.trip_id = t.trip_id
+       JOIN person p ON r.person_id = p.person_id;
 ```
+Wizualizacja wyników dla powyższego widoku:
+![widok_drugi](images/vw_reservation.png)
+
+---
+
+Widok `vw_trip`
+```sql
+CREATE OR REPLACE VIEW vw_trip AS
+SELECT
+  t.trip_id,
+  t.country,
+  t.trip_date,
+  t.trip_name,
+  t.max_no_places,
+  (t.max_no_places - (SELECT COUNT(*)
+                      FROM reservation r
+                      WHERE r.trip_id = t.trip_id
+                        AND r.status != 'C')) AS no_available_places
+FROM trip t;
+```
+Wizualizacja wyników dla powyższego widoku:
+![widok_drugi](images/vw_trip.png)
+
+---
+
+Widok `vw_available_trip`
+```sql
+CREATE OR REPLACE VIEW vw_available_trip AS
+SELECT *
+FROM vw_trip
+WHERE trip_date > CURRENT_DATE AND no_available_places > 0;
+```
+
+Wizualizacja wyników dla powyższego widoku:
+![widok_trzeci](images/vw_available_trip.png)
 
 ---
 
