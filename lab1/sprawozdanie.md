@@ -254,14 +254,31 @@ Polecenie commit trwale zatwierdza transakcję w bazie danych.
 Polecenie rollback zrywa i wycofuje wszystkie niezazatwierdzone zmiany,   
 przywracając stan sprzed rozpoczęcia transakcji.
 
+```
+
+``` sql
 -- Test ROLLBACK
 insert into person(firstname, lastname) values ('Adam', 'Testowy');
+
+```
+![Przed rollback](images/Person_przed_rollback.png)
+
+``` sql
+
 rollback; -- Wiersz wycofany
-![]
+
+```
+![Po rollback](images/Person_po_rollback.png)
+
+``` sql
 -- Test COMMIT
 insert into person(firstname, lastname) values ('Ewa', 'Zatwierdzona');
 commit; -- Wiersz zostaje trwale zapisany
+``` 
 
+![Po commit](images/Person_po_commit.png)
+
+``` sql
 
 2. Błędy podczas wykonywania transakcji
 
@@ -271,6 +288,15 @@ Jednak inne, poprawne instrukcje wykonane w tej samej sesji mogą zostać trwale
 Inaczej zachowuje się kod umieszczony w bloku anonimowym PL/SQL (struktura declare, begin, exception, end;) .  
 Wystąpienie błędu w sekcji wykonawczej przerywa działanie bloku i przechodzi do obsługi wyjątków . Żaden błędny wiersz nie zostaje dopisany.
 
+3. Porównanie Oracle PL/SQL z MS SQL Server T-SQL 
+
+Zarządzanie transakcjami: W MS SQL Server (T-SQL) domyślnie działa tryb auto-commit – każda operacja  to oddzielna transakcja, chyba że jawnie zgrupujemy je poleceniem BEGIN TRAN.  
+W Oracle tryb auto-commit jest zazwyczaj wyłączony. Pierwsza instrukcja DML automatycznie otwiera nową transakcję, co wymusza na programiście jawne użycie commit lub rollback.
+
+Struktura kodu i błędy: W T-SQL do obsługi błędów używa się bloków TRY...CATCH. W Oracle programowanie proceduralne opiera się na blokach PL/SQL z wyodrębnioną sekcją exception do przechwytywania wyjątków .
+
+
+```
 
 
 ```
