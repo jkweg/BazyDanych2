@@ -811,7 +811,60 @@ Należy przygotować procedury: `p_add_reservation_5`, `p_modify_reservation_sta
 
 ```sql
 
--- wyniki, kod, zrzuty ekranów, komentarz ...
+
+CREATE OR REPLACE TRIGGER trg_check_places_5
+BEFORE INSERT OR UPDATE OF status ON reservation
+FOR EACH ROW
+DECLARE
+    -- Autonomiczna transakcja pozwala odpytać tabelę, na której właśnie trwają zmiany
+    PRAGMA AUTONOMOUS_TRANSACTION;
+    v_avail INT;
+BEGIN
+    IF :NEW.status IN ('N', 'P') THEN
+        SELECT max_no_places - (
+            SELECT COUNT(*) FROM reservation
+            WHERE trip_id = :NEW.trip_id AND status IN ('N', 'P')
+        ) INTO v_avail FROM trip WHERE trip_id = :NEW.trip_id;
+
+        IF v_avail <= 0 THEN
+            RAISE_APPLICATION_ERROR(-20050, 'Brak wolnych miejsc na te wycieczke.');
+        END IF;
+    END IF;
+    COMMIT;
+END;
+/
+
+
+CREATE OR REPLACE PROCEDURE p_add_reservation_5(p_trip INT, p_person INT) AS
+BEGIN
+    INSERT INTO reservation(trip_id, person_id, status) VALUES (p_trip, p_person, 'N');
+    COMMIT;
+END;
+/
+
+
+CREATE OR REPLACE PROCEDURE p_modify_reservation_status_5(p_res INT, p_stat CHAR) AS
+BEGIN
+    UPDATE reservation SET status = p_stat WHERE reservation_id = p_res;
+    COMMIT;
+END;
+/
+
+
+CREATE OR REPLACE PROCEDURE p_modify_max_no_places_5 (p_trip_id IN INT, p_max_no_places IN INT) AS
+    v_taken_places INT;
+BEGIN
+    SELECT COUNT(*) INTO v_taken_places
+    FROM reservation WHERE trip_id = p_trip_id AND status IN ('N', 'P');
+
+    IF p_max_no_places < v_taken_places THEN
+        RAISE_APPLICATION_ERROR(-20021, 'Nie mozna zmniejszyc liczby miejsc ponizej: ' || v_taken_places);
+    END IF;
+
+    UPDATE trip SET max_no_places = p_max_no_places WHERE trip_id = p_trip_id;
+    COMMIT;
+END;
+/
 
 ```
 
@@ -821,8 +874,57 @@ Należy przygotować procedury: `p_add_reservation_5`, `p_modify_reservation_sta
 
 Porównaj sposób programowania w systemie Oracle PL/SQL ze znanym ci systemem/językiem MS Sqlserver T-SQL
 
-```sql
+Zarówno Oracle PL/SQL, jak i MS SQL Server T-SQL to potężne, rozszerzone
+dialekty języka SQL służące do programowania baz danych. Choć realizują
+podobne zadania, różnią się w kilku kluczowych aspektach architektonicznych
+i składniowych, co było dobrze widoczne podczas wykonywania ćwiczeń:
 
--- komentarz ...
+**1. Zarządzanie Transakcjami (Domyślne zachowanie)**
 
-```
+- **MS SQL Server (T-SQL):** Domyślnie działa w trybie _Auto-Commit_.
+  Każda pojedyncza instrukcja modyfikująca dane (DML, np. `INSERT`,
+  `UPDATE`) jest traktowana jako niezależna transakcja i od razu
+  zapisywana w bazie. Aby zgrupować operacje, programista musi jawnie
+  otworzyć transakcję poleceniem `BEGIN TRAN` i zakończyć ją przez
+  `COMMIT` lub `ROLLBACK`.
+- **Oracle PL/SQL:** Oracle nie posiada jawnego polecenia otwierającego
+  transakcję (brak `BEGIN TRAN`). Transakcja rozpoczyna się **automatycznie
+  i w sposób niejawny** w momencie wykonania pierwszej instrukcji DML
+  w sesji. Zmiany nie są widoczne dla innych użytkowników (izolacja)
+  i nie są trwale zapisane, dopóki programista jawnie nie wykona polecenia
+  `COMMIT`. Jeśli sesja zostanie przerwana przed zatwierdzeniem, następuje
+  automatyczny `ROLLBACK`.
+
+**2. Obsługa błędów (Try/Catch vs Wyjątki)**
+
+- **MS SQL Server (T-SQL):** Do kontrolowanego przechwytywania błędów
+  T-SQL używa bloków znanych z języków wysokiego poziomu, czyli
+  `BEGIN TRY ... END TRY` oraz `BEGIN CATCH ... END CATCH`.
+- **Oracle PL/SQL:** Logika jest zamknięta w tzw. blokach anonimowych lub
+  nazwanych (np. procedurach), zdefiniowanych słowami
+  `DECLARE ... BEGIN ... EXCEPTION ... END;`. Obsługa błędów odbywa się
+  w wydzielonej sekcji `EXCEPTION`, gdzie programista definiuje, co ma
+  się stać (np. wywołanie instrukcji `ROLLBACK`) w przypadku napotkania
+  zdefiniowanych lub ogólnych wyjątków. Do wymuszania błędów wykorzystuje
+  się wbudowaną procedurę `RAISE_APPLICATION_ERROR`.
+
+**3. Zwracanie zbiorów danych z procedur/funkcji**
+
+- **MS SQL Server (T-SQL):** Procedura składowana (Stored Procedure) może
+  po prostu zawierać instrukcję `SELECT`. Po jej wywołaniu, baza
+  natychmiast zwraca wynik w postaci tabelarycznej do klienta. Funkcje
+  również mogą zwracać tzw. _Table-Valued Function (TVF)_.
+- **Oracle PL/SQL:** W Oracle jest to nieco bardziej ustrukturyzowane.
+  Standardowa funkcja/procedura nie może po prostu rzucić `SELECT`
+  w pustkę. Aby zwrócić tabelę wyników do klienta, najprostszym i
+  najczęściej stosowanym sposobem jest użycie wskaźnika typu
+  `SYS_REFCURSOR`, który następnie jest odczytywany przez aplikację
+  wywołującą (np. DataGrip).
+
+**Podsumowanie wniosków:**
+Oba systemy realizują te same zasady ACID, ale Oracle kładzie większy
+nacisk na świadome zarządzanie transakcjami przez programistę poprzez
+niejawne ich otwieranie. Podejście Oracle do pisania kodu (podział na
+sekcje deklaracji, wykonawczą i wyjątków) wymusza również nieco większą
+dyscyplinę strukturalną niż w przypadku często bardziej "płaskich"
+skryptów T-SQL.
