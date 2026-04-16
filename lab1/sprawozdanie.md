@@ -245,56 +245,50 @@ w szczególności dokumenty: `10_modyf_ora_north.pdf`, `20_ora_plsql_north.pdf`
 ```sql
 
 1. Działanie transakcji (COMMIT i ROLLBACK)
-Transakcje w bazach danych opierają się na właściwościach ACID  
-(niepodzielność, spójność, izolacja, trwałość) . W systemie Oracle po   
+Transakcje w bazach danych opierają się na właściwościach ACID
+(niepodzielność, spójność, izolacja, trwałość) . W systemie Oracle po
 wykonaniu operacji modyfikujących dane (DML), zmiany nie są od razu widoczne dla innych użytkowników.
 
 Polecenie commit trwale zatwierdza transakcję w bazie danych.
 
-Polecenie rollback zrywa i wycofuje wszystkie niezazatwierdzone zmiany,   
+Polecenie rollback zrywa i wycofuje wszystkie niezazatwierdzone zmiany,
 przywracając stan sprzed rozpoczęcia transakcji.
 
 ```
 
-``` sql
+```sql
 -- Test ROLLBACK
 insert into person(firstname, lastname) values ('Adam', 'Testowy');
-
-```
-![Przed rollback](images/Person_przed_rollback.png)
-
-``` sql
 
 rollback; -- Wiersz wycofany
 
 ```
-![Po rollback](images/Person_po_rollback.png)
 
-``` sql
+```sql
 -- Test COMMIT
 insert into person(firstname, lastname) values ('Ewa', 'Zatwierdzona');
+
 commit; -- Wiersz zostaje trwale zapisany
-``` 
+```
 
-![Po commit](images/Person_po_commit.png)
-
-``` sql
+```sql
 
 2. Błędy podczas wykonywania transakcji
 
-Jeśli wykonujemy serię niezależnych instrukcji INSERT i w jednej z nich  
-wystąpi błąd (np. próba wstawienia wartości NULL, co generuje błąd ORA-01400) , ta konkretna operacja jest odrzucana.   
-Jednak inne, poprawne instrukcje wykonane w tej samej sesji mogą zostać trwale zapisane, jeśli na końcu wykonamy commit.  
-Inaczej zachowuje się kod umieszczony w bloku anonimowym PL/SQL (struktura declare, begin, exception, end;) .  
+Jeśli wykonujemy serię niezależnych instrukcji INSERT i w jednej z nich
+wystąpi błąd (np. próba wstawienia wartości NULL, co generuje błąd ORA-01400) , ta konkretna operacja jest odrzucana.
+Jednak inne, poprawne instrukcje wykonane w tej samej sesji mogą zostać trwale zapisane, jeśli na końcu wykonamy commit.
+Inaczej zachowuje się kod umieszczony w bloku anonimowym PL/SQL (struktura declare, begin, exception, end;) .
 Wystąpienie błędu w sekcji wykonawczej przerywa działanie bloku i przechodzi do obsługi wyjątków . Żaden błędny wiersz nie zostaje dopisany.
 
-3. Porównanie Oracle PL/SQL z MS SQL Server T-SQL 
+3. Porównanie Oracle PL/SQL z MS SQL Server T-SQL
 
-Zarządzanie transakcjami: W MS SQL Server (T-SQL) domyślnie działa tryb auto-commit – każda operacja  to oddzielna transakcja, chyba że jawnie zgrupujemy je poleceniem BEGIN TRAN.  
+Zarządzanie transakcjami: W MS SQL Server (T-SQL) domyślnie działa tryb auto-commit – każda operacja  to oddzielna transakcja, chyba że jawnie zgrupujemy je poleceniem BEGIN TRAN.
 W Oracle tryb auto-commit jest zazwyczaj wyłączony. Pierwsza instrukcja DML automatycznie otwiera nową transakcję, co wymusza na programiście jawne użycie commit lub rollback.
 
 Struktura kodu i błędy: W T-SQL do obsługi błędów używa się bloków TRY...CATCH. W Oracle programowanie proceduralne opiera się na blokach PL/SQL z wyodrębnioną sekcją exception do przechwytywania wyjątków .
 
+```
 
 ```
 
@@ -326,6 +320,7 @@ Proponowany zestaw widoków można rozbudować wedle uznania/potrzeb
 # Zadanie 1 - rozwiązanie
 
 Widok `vw_reservation`
+
 ```sql
 CREATE OR REPLACE VIEW vw_reservation AS
 SELECT
@@ -342,12 +337,14 @@ FROM reservation r
        JOIN trip t ON r.trip_id = t.trip_id
        JOIN person p ON r.person_id = p.person_id;
 ```
+
 Wizualizacja wyników dla powyższego widoku:
 ![widok_drugi](images/vw_reservation.png)
 
 ---
 
 Widok `vw_trip`
+
 ```sql
 CREATE OR REPLACE VIEW vw_trip AS
 SELECT
@@ -362,12 +359,14 @@ SELECT
                         AND r.status != 'C')) AS no_available_places
 FROM trip t;
 ```
+
 Wizualizacja wyników dla powyższego widoku:
 ![widok_drugi](images/vw_trip.png)
 
 ---
 
 Widok `vw_available_trip`
+
 ```sql
 CREATE OR REPLACE VIEW vw_available_trip AS
 SELECT *
@@ -377,7 +376,6 @@ WHERE trip_date > CURRENT_DATE AND no_available_places > 0;
 
 Wizualizacja wyników dla powyższego widoku:
 ![widok_trzeci](images/vw_available_trip.png)
-
 
 # Zadanie 2 - funkcje
 
@@ -412,7 +410,54 @@ Proponowany zestaw funkcji można rozbudować wedle uznania/potrzeb
 
 ```sql
 
--- wyniki, kod, zrzuty ekranów, komentarz ...
+CREATE OR REPLACE FUNCTION f_trip_participants(p_trip_id INT) RETURN SYS_REFCURSOR IS
+    v_rc SYS_REFCURSOR;
+    v_count INT;
+BEGIN
+    SELECT COUNT(*) INTO v_count FROM trip WHERE trip_id = p_trip_id;
+    IF v_count = 0 THEN
+        RAISE_APPLICATION_ERROR(-20001, 'Błąd: Wycieczka o podanym ID nie istnieje.');
+    END IF;
+
+    OPEN v_rc FOR
+        SELECT * FROM vw_reservation WHERE trip_id = p_trip_id;
+    RETURN v_rc;
+END;
+/
+
+CREATE OR REPLACE FUNCTION f_person_reservations(p_person_id INT) RETURN SYS_REFCURSOR IS
+    v_rc SYS_REFCURSOR;
+    v_count INT;
+BEGIN
+    SELECT COUNT(*) INTO v_count FROM person WHERE person_id = p_person_id;
+    IF v_count = 0 THEN
+        RAISE_APPLICATION_ERROR(-20002, 'Błąd: Osoba o podanym ID nie istnieje.');
+    END IF;
+
+    OPEN v_rc FOR
+        SELECT * FROM vw_reservation WHERE person_id = p_person_id;
+    RETURN v_rc;
+END;
+/
+
+CREATE OR REPLACE FUNCTION f_available_trips_to(
+    p_country VARCHAR2,
+    p_date_from DATE,
+    p_date_to DATE
+) RETURN SYS_REFCURSOR IS
+    v_rc SYS_REFCURSOR;
+BEGIN
+    IF p_date_from > p_date_to THEN
+        RAISE_APPLICATION_ERROR(-20003, 'Błąd: Data początkowa nie może być późniejsza niż data końcowa.');
+    END IF;
+
+    OPEN v_rc FOR
+        SELECT * FROM vw_available_trip
+        WHERE country = p_country
+          AND trip_date BETWEEN p_date_from AND p_date_to;
+    RETURN v_rc;
+END;
+/
 
 ```
 
