@@ -32,4 +32,3 @@ SELECT *
 FROM vw_trip
 WHERE trip_date > CURRENT_DATE AND no_available_places > 0;
 
-select * from vw_available_trip

@@ -18,7 +18,6 @@ IF v_trip_date <= TRUNC(SYSDATE) THEN
         RAISE_APPLICATION_ERROR(-20001, 'Wycieczka już się odbyła lub jest zaplanowana na dzisiaj.');
 END IF;
 
-    -- Kontrola miejsc (teraz korzystamy z nowego pola!)
     IF v_available_places <= 0 THEN
         RAISE_APPLICATION_ERROR(-20002, 'Brak wolnych miejsc na tę wycieczkę.');
 END IF;

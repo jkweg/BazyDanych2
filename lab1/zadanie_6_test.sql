@@ -1,5 +1,8 @@
 SELECT trip_id, max_no_places, no_available_places FROM trip WHERE trip_id = 4;
 
+ALTER TRIGGER trg_check_places_5 DISABLE;
+ALTER TRIGGER trg_reservation_places_6b DISABLE;
+
 BEGIN
     p_add_reservation_6a(4, 2);
 END;

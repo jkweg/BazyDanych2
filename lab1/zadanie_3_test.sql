@@ -1,5 +1,5 @@
 BEGIN
-    p_add_reservation(4, 3);
+    p_add_reservation(3, 3);
 END;
 /
 
@@ -7,7 +7,6 @@ SELECT * FROM reservation WHERE trip_id = 4 AND person_id = 3;
 SELECT * FROM log;
 
 BEGIN
-
     p_add_reservation(1, 1);
 END;
 /
