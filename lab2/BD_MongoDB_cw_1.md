@@ -6,7 +6,7 @@
 
 ---
 
-**Imiona i nazwiska autorów:**
+**Imiona i nazwiska autorów:** Krystian Augustyn, Jakub Węgrzyniak
 
 --- 
 
@@ -1296,14 +1296,77 @@ db.employees.find(
 
 ## Zadanie 2  - rozwiązanie
 
-> Wyniki: 
-> 
-> przykłady, kod, zrzuty ekranów, komentarz ...
+```js
+
+db.employees.insertOne({
+  "EmployeeID": 10,
+  "FirstName": "Jan",
+  "LastName": "Kowalski",
+  "Address": {
+    "City": "Krakow",
+    "Country": "Poland"
+  },
+  "Salary": 5500,
+  "HireDate": ISODate("2024-01-15T00:00:00Z")
+});
+
+// Dodałem nowego pracownika z Polski
+```
+
+```js
+db.employees.find({
+  $and: [
+    { "Address.Country": "USA" },
+    { "Salary": { $gt: 1500 } }
+  ]
+}); 
+
+// Szukamy pracowników z USA, którzy zarabiają więcej niż 1500.
+```
+
+```js
+db.employees.find(
+  { 
+    $or: [ 
+      { "Title": "Sales Representative" }, 
+      { "Salary": { $lt: 2000 } } 
+    ] 
+  }, 
+  { 
+    "_id": 0, 
+    "FirstName": 1, 
+    "LastName": 1, 
+    "Title": 1, 
+    "Salary": 1 
+  }
+);
+
+// Szukamy pracowników, którzy są na stanowisku Sales Representative LUB zarabiają mniej niż 2000.
+```
 
 
 ```js
---  ...
+db.employees.find(
+  { "Salary": { $gte: 1000 } }, 
+  { "_id": 0, "FirstName": 1, "LastName": 1, "Address.City": 1 }
+
+  // Wyświetlamy tylko imię, nazwisko i miasto, ukrywając techniczne pole _id.
+);
 ```
+
+
+```js
+db.employees.find({
+  $expr: {
+    $eq: [{ $year: "$HireDate" }, 1992]
+  }
+}).count();
+
+// Sprawdzamy, ilu pracowników zostało zatrudnionych w 1992 roku
+
+```
+
+
 
 
 ---

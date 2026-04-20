@@ -2,8 +2,8 @@
 
 -- Test ROLLBACK
 insert into person(firstname, lastname) values ('Adam', 'Testowy');
-rollback; -- Wiersz wycofany
+rollback;
 
 -- Test COMMIT
 insert into person(firstname, lastname) values ('Ewa', 'Zatwierdzona');
-commit; -- Wiersz zostaje trwale zapisany
+commit;
