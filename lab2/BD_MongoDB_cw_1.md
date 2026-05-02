@@ -3018,12 +3018,119 @@ TotalOrderValue : ...
 
 ## Zadanie 4  - rozwiązanie
 
-> Wyniki: 
-> 
-> przykłady, kod, zrzuty ekranów, komentarz ...
-
-
-```js
---  ...
+``` js
+db.orders_tmp.aggregate([
+  // Etap 1: Tworzenie nowych struktur (Dates, Shippment) i wyliczanie TotalOrderValue
+  {
+    $addFields: {
+      "Shippment": {
+        "ShipAddress": "$ShipAddress",
+        "ShipCity": "$ShipCity",
+        "ShipCountry": "$ShipCountry",
+        "ShipName": "$ShipName",
+        "ShipPostalCode": "$ShipPostalCode",
+        "ShipRegion": "$ShipRegion"
+      },
+      "Dates": {
+        "OrderDate": "$OrderDate",
+        "RequiredDate": "$RequiredDate",
+        "ShippedDate": "$ShippedDate"
+      },
+      "TotalOrderValue": { $sum: "$Orderdetails.Totalvalue" } // Wartosc calkowita
+    }
+  },
+  // Etap 2: Usunięcie starych, luźnych pól, żeby nie dublować danych w dokumencie
+  {
+    $unset: [
+      "ShipAddress", "ShipCity", "ShipCountry", "ShipName", "ShipPostalCode", "ShipRegion",
+      "OrderDate", "RequiredDate", "ShippedDate"
+    ]
+  },
+  // Etap 3: Zapisanie wyniku z powrotem do kolekcji orders_tmp
+  {
+    $out: "orders_tmp"
+  }
+]);
 ```
 
+**Wyniki**:
+```js
+{
+  _id: ObjectId('63a060b9bb3b972d6f4e1fc6'),
+  OrderID: 10248,
+  Freight: 32.38,
+  Customer: {
+    CustomerID: 'VINET',
+    CompanyName: 'Vins et alcools Chevalier'
+  },
+  Employee: {
+    EmployeeID: 5,
+    LastName: 'Buchanan',
+    FirstName: 'Steven'
+  },
+  Shipper: {
+    ShipperID: 3,
+    CompanyName: 'Federal Shipping'
+  },
+  Orderdetails: [
+    {
+      UnitPrice: 14,
+      Quantity: 12,
+      Discount: 0,
+      product: {
+        ProductID: 11,
+        ProductName: 'Queso Cabrales',
+        SupplierID: 5,
+        CategoryID: 4,
+        CategoryName: 'Dairy Products',
+        SupplierName: "Cooperativa de Quesos 'Las Cabras'"
+      },
+      Totalvalue: 168
+    },
+    {
+      UnitPrice: 9.8,
+      Quantity: 10,
+      Discount: 0,
+      product: {
+        ProductID: 42,
+        ProductName: 'Singaporean Hokkien Fried Mee',
+        SupplierID: 20,
+        CategoryID: 5,
+        CategoryName: 'Grains/Cereals',
+        SupplierName: 'Leka Trading'
+      },
+      Totalvalue: 98
+    },
+    {
+      UnitPrice: 34.8,
+      Quantity: 5,
+      Discount: 0,
+      product: {
+        ProductID: 72,
+        ProductName: 'Mozzarella di Giovanni',
+        SupplierID: 14,
+        CategoryID: 4,
+        CategoryName: 'Dairy Products',
+        SupplierName: 'Formaggi Fortini s.r.l.'
+      },
+      Totalvalue: 174
+    }
+  ],
+  Shippment: {
+    ShipAddress: "59 rue de l'Abbaye",
+    ShipCity: 'Reims',
+    ShipCountry: 'France',
+    ShipName: 'Vins et alcools Chevalier',
+    ShipPostalCode: '51100',
+    ShipRegion: null
+  },
+  Dates: {
+    OrderDate: 1996-07-04T00:00:00.000Z,
+    RequiredDate: 1996-08-01T00:00:00.000Z,
+    ShippedDate: 1996-07-16T00:00:00.000Z
+  },
+  TotalOrderValue: 440
+}
+```
+
+Żeby rozwiązać to zadanie, zaimplementowaliśmy jedną agregację, która porządkuje nam całą strukturę dokumentu. Wykorzystaliśmy etap $addFields $, żeby spakować porozrzucane pola z adresami do jednego zagnieżdżonego obiektu Shippment, a daty zgrupowaliśmy w obiekcie Dates. Całkowitą wartość zamówienia policzyliśmy, sumując operatorem $sum$ wartości bezpośrednio z tablicy Orderdetails. Żeby nie robić bałaganu i nie dublować danych, usunęliśmy stare, pojedyncze pola za pomocą $unset$. Na sam koniec użyliśmy $out, żeby nadpisać kolekcję tym nowym, ułożonym dokumentem.
