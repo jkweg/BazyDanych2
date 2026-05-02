@@ -1780,16 +1780,183 @@ db.em_by_country_title.find();
 
 ## Zadanie 3  - rozwiązanie
 
-> Wyniki: 
-> 
-> przykłady, kod, zrzuty ekranów, komentarz ...
 
 
+Agregacja grupuje pracowników po mieście zamieszkania, używając $group i operatora $sum i sortuje wyniki malejąco.
 ```js
---  ...
+ db.employees.aggregate([
+  { $group: { _id: "$Address.City", liczba_pracownikow: { $sum: 1 } } },
+  { $sort: { liczba_pracownikow: -1 } }
+]);
+```
+Wynik:
+```js
+{
+  _id: 'London',
+  liczba_pracownikow: 4
+}
+{
+  _id: 'Seattle',
+  liczba_pracownikow: 2
+}
+{
+  _id: 'Kirkland',
+  liczba_pracownikow: 1
+}
+{
+  _id: 'Redmond',
+  liczba_pracownikow: 1
+}
 ```
 
 ---
+
+Użycie $match do odfiltrowania stanowiska, $sort do posortowania pensji od najwyższej oraz $project do wyświetlenia tylko imienia, nazwiska i pensji.
+```js
+db.employees.aggregate([
+  { $match: { Title: "Sales Representative" } },
+  { $sort: { Salary: -1 } },
+  { $project: { _id: 0, FirstName: 1, LastName: 1, Salary: 1, Title: 1 } }
+]);
+```
+
+Wynik:
+```js
+{
+  FirstName: 'Michael',
+  LastName: 'Suyama',
+  Title: 'Sales Representative',
+  Salary: 1500
+}
+{
+  FirstName: 'Anne',
+  LastName: 'Dodsworth',
+  Title: 'Sales Representative',
+  Salary: 1400
+}
+{
+  FirstName: 'Janet',
+  LastName: 'Leverling',
+  Title: 'Sales Representative',
+  Salary: 1200
+}
+{
+  FirstName: 'Margaret',
+  LastName: 'Peacock',
+  Title: 'Sales Representative',
+  Salary: 1100
+}
+{
+  FirstName: 'Nancy',
+  LastName: 'Davolio',
+  Title: 'Sales Representative',
+  Salary: 1000
+}
+{
+  FirstName: 'Robert',
+  LastName: 'King',
+  Title: 'Sales Representative',
+  Salary: 1000
+}
+```
+
+---
+
+Grupowanie pracowników względem państwa i zsumowanie ich zarobków operatorem $sum.
+
+```js
+db.employees.aggregate([
+  { $group: { _id: "$Address.Country", suma_wyplat: { $sum: "$Salary" } } }
+]);
+```
+
+Wynik:
+```js
+{
+  _id: 'UK',
+  suma_wyplat: 5900
+}
+{
+  _id: 'USA',
+  suma_wyplat: 16300
+}
+```
+
+---
+Użycie operatora $out do zapisania odfiltrowanych wyników (pracowników z pensją powyżej 1200) do nowej, niezależnej kolekcji o nazwie 'bogacze'.
+
+```js
+db.employees.aggregate([
+  { $match: { Salary: { $gt: 1200 } } },
+  { $project: { _id: 0, FirstName: 1, LastName: 1, Salary: 1 } },
+  { $out: "bogacze" }
+]);
+```
+Odpalamy komende:
+
+```js
+db.bogacze.find();
+```
+
+Wynik:
+
+```js
+{
+  _id: ObjectId('69f5b5214910916457e35c2c'),
+  FirstName: 'Andrew',
+  LastName: 'Fuller',
+  Salary: 10000
+}
+{
+  _id: ObjectId('69f5b5214910916457e35c2d'),
+  FirstName: 'Steven',
+  LastName: 'Buchanan',
+  Salary: 2000
+}
+{
+  _id: ObjectId('69f5b5214910916457e35c2e'),
+  FirstName: 'Michael',
+  LastName: 'Suyama',
+  Salary: 1500
+}
+{
+  _id: ObjectId('69f5b5214910916457e35c2f'),
+  FirstName: 'Laura',
+  LastName: 'Callahan',
+  Salary: 3000
+}
+{
+  _id: ObjectId('69f5b5214910916457e35c30'),
+  FirstName: 'Anne',
+  LastName: 'Dodsworth',
+  Salary: 1400
+}
+```
+
+---
+Wykorzystanie operatora $unwind w celu spłaszczenia tablicy 'Phone'. Jeśli pracownik miał dwa numery telefonu, teraz w wyniku pojawia się jako dwa oddzielne wpisy.
+
+```js
+db.employees.aggregate([
+  { $unwind: "$Phone" },
+  { $project: { _id: 0, FirstName: 1, LastName: 1, Phone: 1 } }
+]);
+```
+
+Wynik:
+```js
+{
+  FirstName: 'Nancy',
+  LastName: 'Davolio',
+  Phone: '(206) 555-9857'
+}
+{
+  FirstName: 'Nancy',
+  LastName: 'Davolio',
+  Phone: '(206) 555-9858'
+}
+```
+
 # Przykład 4
 
 
