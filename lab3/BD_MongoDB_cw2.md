@@ -283,14 +283,230 @@ Do sprawozdania należy dołączyć
 
 ## Zadanie 2  - rozwiązanie
 
-> Wyniki: 
-> 
-> przykłady, kod, zrzuty ekranów, komentarz ...
 
-```js
---  ...
+Wybraliśmy przykład B do implementacji
+
+**a)**
+
+W przypadku modelowania bazy dla wycieczek organizowanych przez firmy oraz rezerwowanych i ocenianych przez osoby, możemy rozważyć dwa podejścia:  
+
+**Wariant 1:** Model silnie znormalizowany (Relacyjny)
+
+Struktura: Tworzymy 5 oddzielnych kolekcji: companies (firmy), people (osoby), trips (wycieczki), bookings (rezerwacje), reviews (oceny). Łączymy je wyłącznie za pomocą referencji (np. w kolekcji reviews trzymamy tylko trip_id i person_id).
+
+Zalety: Całkowity brak duplikacji danych. Jeśli firma zmieni nazwę, modyfikujemy to tylko w jednym dokumencie w kolekcji companies.
+
+Wady: Aby pobrać informacje o wycieczce (np. jej nazwę, nazwę firmy organizującej oraz wszystkie oceny), musimy użyć wielu drogich operacji złączeń ($lookup). W MongoDB jest to mało wydajne i nie wykorzystuje pełnego potencjału bazy dokumentowej.
+
+**Wariant 2:** Model hybrydowy (Dokumentowy)
+
+Struktura: Tworzymy tylko 3 kolekcje: companies, people oraz centralną kolekcję trips. W kolekcji trips przechowujemy podstawowe referencje, ale też stosujemy tablice i dokumenty zagnieżdżone.  
+
+Wykorzystanie mechanizmów:  
+
+Dokumenty zagnieżdżone (embedded documents): Podstawowe dane organizatora (id oraz nazwa firmy) są zagnieżdżone bezpośrednio w dokumencie wycieczki.
+
+Tablice (arrays): Oceny (reviews) to tablica zagnieżdżonych obiektów wewnątrz wycieczki.
+
+Referencje: Rezerwacje to tablica referencji (identyfikatorów) do klientów z kolekcji people.
+
+Zalety: Błyskawiczny odczyt. Większość kluczowych informacji o wycieczce pobieramy pojedynczym zapytaniem (bez $lookup), co idealnie pasuje do architektury aplikacji wyświetlającej oferty.
+
+Wady: Denormalizacja – jeśli firma zmieni nazwę, trzeba ją zaktualizować nie tylko w companies, ale też we wszystkich zagnieżdżonych dokumentach w trips.
+
+
+
+
+
+**Schemat i reguły walidacji danych (dla kolekcji trips)**
+
+Przed dodaniem danych, definiujemy reguły walidacji ($jsonSchema) dla kolekcji docelowej.
+
+``` js
+  db.createCollection("trips", {
+   validator: {
+      $jsonSchema: {
+         bsonType: "object",
+         required: [ "title", "price", "organizer" ],
+         properties: {
+            title: {
+               bsonType: "string",
+               description: "Tytuł wycieczki - wymagany ciąg znaków"
+            },
+            price: {
+               bsonType: "number",
+               minimum: 0,
+               description: "Cena - wymagana liczba dodatnia"
+            },
+            organizer: {
+               bsonType: "object",
+               required: [ "company_id", "company_name" ],
+               description: "Dokument zagnieżdżony - dane firmy organizującej"
+            },
+            booked_by: {
+               bsonType: "array",
+               items: { bsonType: "int" },
+               description: "Tablica referencji - lista ID osób, które wykupiły bilety"
+            },
+            reviews: {
+               bsonType: "array",
+               description: "Tablica zagnieżdżonych dokumentów - oceny wycieczki"
+            }
+         }
+      }
+   }
+});
+```
+
+**b)**
+
+Wypełniamy kolekcje słownikowe (companies, people) oraz główną kolekcję (trips) z wykorzystaniem wymogów strukturalnych (referencje, zagnieżdżenia, tablice).
+
+``` js
+
+// 1. Dodawanie firm organizujących wycieczki
+db.companies.insertMany([
+  { _id: 1, name: "Góry-Travel", contact: "kontakt@gory-travel.pl" },
+  { _id: 2, name: "Morze-Adventures", contact: "biuro@morze.pl" }
+]);
+
+// 2. Dodawanie osób (klientów)
+db.people.insertMany([
+  { _id: 101, firstname: "Jan", lastname: "Kowalski", email: "jan@example.com" },
+  { _id: 102, firstname: "Anna", lastname: "Nowak", email: "anna@example.com" },
+  { _id: 103, firstname: "Piotr", lastname: "Zalewski", email: "piotr@example.com" }
+]);
+
+// 3. Dodawanie wycieczek
+db.trips.insertMany([
+  {
+    _id: 1001,
+    title: "Weekend w Tatrach",
+    price: 450,
+    organizer: { 
+      company_id: 1, 
+      company_name: "Góry-Travel" 
+    },
+    booked_by: [101, 102],
+    reviews: [
+      { person_id: 101, rating: 5, comment: "Świetna wycieczka, polecam!" },
+      { person_id: 102, rating: 4, comment: "Pogoda nie dopisała, ale organizacja super." }
+    ]
+  },
+  {
+    _id: 1002,
+    title: "Rejs po Bałtyku",
+    price: 1200,
+    organizer: { 
+      company_id: 2, 
+      company_name: "Morze-Adventures" 
+    },
+    booked_by: [103],
+    reviews: []
+  }
+]);
+
 ```
 
 
 
+**c)**
 
+Przykład 1: Bardzo szybki odczyt strony wycieczki (ZALETA)
+Ten typ zapytania jest bardzo wydajny, ponieważ dzięki dokumentom zagnieżdżonym i tablicom pobieramy wszystkie szczegóły oferty, organizatora i opinie bez użycia złożonych operacji łączenia relacji.
+
+``` js 
+  db.trips.aggregate([
+  { $match: { _id: 1001 } },
+  { $project: {
+      _id: 0,
+      title: 1,
+      organizerName: "$organizer.company_name",
+      totalBookings: { $size: "$booked_by" },
+      averageRating: { $avg: "$reviews.rating" }
+    }
+  }
+]);
+```
+
+Przykład 2: Pobranie pełnych danych osób, które zarezerwowały wycieczkę (WADA/TRUDNOŚĆ)  
+  
+
+Ponieważ przechowujemy tylko referencje (id uczestników), aby pobrać ich pełne nazwiska, musimy użyć operatora $lookup, co pokazuje, że pewne elementy relacyjne nadal istnieją w modelu dokumentowym.
+
+``` js
+
+  db.trips.aggregate([
+  { $match: { _id: 1001 } },
+  { $lookup: {
+      from: "people",
+      localField: "booked_by",
+      foreignField: "_id",
+      as: "participants_details"
+    }
+  },
+  { $project: {
+      title: 1,
+      "participants_details.firstname": 1,
+      "participants_details.lastname": 1
+    }
+  }
+]);
+
+```
+
+Przykład 3: Dodanie nowej rezerwacji miejsca (ZALETA)
+Dodanie klienta do wycieczki sprowadza się do prostej operacji na tablicy ($push).
+
+``` js 
+
+  db.trips.updateOne(
+  { _id: 1002 },
+  { $push: { booked_by: 101 } }
+);
+
+```
+
+**TESTY**
+
+Test 1:
+
+``` js
+
+  db.trips.aggregate([
+  { $match: { _id: 1001 } },
+  { $project: { _id: 0, title: 1, organizerName: "$organizer.company_name", totalBookings: { $size: "$booked_by" }, averageRating: { $avg: "$reviews.rating" } } }
+]);
+
+```
+
+![Test 1](screeny/test1.png)
+
+
+Test 2:
+
+``` js 
+
+  db.trips.aggregate([
+  { $match: { _id: 1001 } },
+  { $lookup: { from: "people", localField: "booked_by", foreignField: "_id", as: "participants_details" } },
+  { $project: { title: 1, "participants_details.firstname": 1, "participants_details.lastname": 1 } }
+]);
+
+```
+
+![Test 2](screeny/test2.png)
+
+
+Test 3:
+
+``` js
+
+  db.trips.updateOne(
+  { _id: 1002 },
+  { $push: { booked_by: 101 } }
+);
+
+```
+
+![Test 3](screeny/test3.png)
