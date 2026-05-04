@@ -1,0 +1,38 @@
+[{
+  "_id": 1001,
+  "title": "Weekend w Tatrach",
+  "price": 450,
+  "organizer": {
+    "company_id": 1,
+    "company_name": "Góry-Travel"
+  },
+  "booked_by": [
+    101,
+    102
+  ],
+  "reviews": [
+    {
+      "person_id": 101,
+      "rating": 5,
+      "comment": "Świetna wycieczka, polecam!"
+    },
+    {
+      "person_id": 102,
+      "rating": 4,
+      "comment": "Pogoda nie dopisała, ale organizacja super."
+    }
+  ]
+},
+{
+  "_id": 1002,
+  "title": "Rejs po Bałtyku",
+  "price": 1200,
+  "organizer": {
+    "company_id": 2,
+    "company_name": "Morze-Adventures"
+  },
+  "booked_by": [
+    103
+  ],
+  "reviews": []
+}]
