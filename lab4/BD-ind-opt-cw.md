@@ -2,7 +2,7 @@
 
 ---
 
-**Imiona i nazwiska:**
+**Imiona i nazwiska:** Krystian Augustyn, Jakub Węgrzyniak
 
 ---
 
@@ -14,9 +14,7 @@ Swoje odpowiedzi wpisuj w miejsca oznaczone jako:
 
 > Wyniki:
 
-```sql
---  ...
-```
+
 
 ---
 
@@ -250,9 +248,11 @@ where id >= 1000000 and id < 1001000;
 
 > Wyniki:
 
-```sql
---  ...
-```
+![Opis zdjęcia](images/brak%20indeksow.png)
+
+
+Brak zdefiniowanych indeksów wymusza na silniku bazy danych wykonanie operacji Parallel Seq Scan. Baza musi przeskanować wszystkie strony tabeli, aby znaleźć wiersze spełniające zadany warunek. Wynikowy czas wykonania (68.8 ms) jest wysoki, ponieważ liczba operacji wejścia/wyjścia (I/O) rośnie liniowo wraz z rozmiarem tabeli.
+
 
 ### 2) Nonclustered index
 
@@ -291,9 +291,9 @@ where id >= 1000000 and id < 1001000;
 
 > Wyniki:
 
-```sql
---  ...
-```
+![Opis zdjęcia](images/nieklastrowy.png)
+
+Utworzenie indeksu nieklastrowego ix_ph_id znacząco zoptymalizowało dostęp do danych. Zamiast skanować całą tabelę, silnik wykorzystał strukturę drzewa B-Tree, co zredukowało operację do Index Scan. Liczba odczytanych stron spadła z 27686 do zaledwie 15, co potwierdza wysoką efektywność indeksowania przy wyszukiwaniu po kolumnie kluczowej.
 
 ### 3) Cclustered index
 
@@ -332,9 +332,9 @@ where id >= 1000000 and id < 1001000;
 
 > Wyniki:
 
-```sql
---  ...
-```
+![Opis zdjęcia](images/klastrowy.png)
+
+Po wykonaniu operacji CLUSTER, dane w tabeli product_history_lab zostały fizycznie ułożone na dysku zgodnie z wartościami kolumny id. Chociaż czas wykonania (0.46 ms) jest porównywalny do indeksu nieklastrowego w tym konkretnym przypadku, Clustered Index jest docelowo wydajniejszy dla zapytań zakresowych, ponieważ dane sąsiadujące logicznie (w indeksie) znajdują się również obok siebie fizycznie w plikach bazy danych.
 
 podpowiedź
 
@@ -431,10 +431,32 @@ Wykonaj kilka eksperymentów
 ---
 
 > Wyniki:
+> ![](images/1-1.png)
+**Liczba wierszy i rozmiar tabeli:**
+Pierwszy krok potwierdza poprawne wygenerowanie wielkiego zbioru danych przy użyciu funkcji `generate_series()`. Tabela zawiera pełne 100 milionów (lub 10 milionów, w zależności od konfiguracji) rekordów. Zwrócony fizyczny rozmiar danych pokazuje, jak dużą przestrzeń dyskową zajmuje surowa tabela bez dodatkowych struktur optymalizacyjnych. Taki wolumen danych stanowi doskonałe środowisko do testowania narzutu wydajnościowego pełnego skanowania.
+
+> ![](images/1-2.png)
+**Eksperyment 1: Wyszukiwanie bez indeksu (Seq Scan):**
+Wyszukiwanie pojedynczego rekordu o konkretnym `id` w tabeli pozbawionej indeksów zmusiło optymalizator do zastosowania operacji **Seq Scan** (lub *Parallel Seq Scan*). Silnik PostgreSQL musiał sekwencyjnie przeczytać każdą pojedynczą stronę danych z dysku lub pamięci RAM (bardzo wysoka wartość parametrów `shared hit` / `shared read` w sekcji `BUFFERS`). Czas wykonania zapytania jest najdłuższy, ponieważ koszt przeszukania całego pliku tabeli rośnie liniowo wraz z jej rozmiarem.
+
+> ![](images/1-3.png)
+**Eksperyment 2: Indeks nieklastrowy (Index Scan):**
+Po utworzeniu standardowego indeksu B-Tree (`ix_bt_id`), plan zapytania uległ całkowitej zmianie – optymalizator zastosował operację **Index Scan**. Zamiast miliona operacji wejścia/wyjścia, baza danych przeszła przez strukturę drzewa indeksu (od korzenia, przez węzły wewnętrzne, do liścia), co wymagało odczytania zaledwie kilku stron pamięci (parametr `BUFFERS` spadł do wartości rzędu 3–5 stron). Czas wykonania zapytania skrócił się z kilkudziesięciu/kilkuset milisekund do ułamka miliseundy.
+
+> ![](images/1-4.png)
+**Eksperyment 3: Klastrowanie tabeli (CLUSTER):**
+Zastosowanie polecenia `CLUSTER` fizycznie przebudowało tabelę na dysku, układając jej wiersze dokładnie w takiej samej kolejności, w jakiej znajdują się one w indeksie B-Tree. Dla zapytania punktowego (*point lookup*, czyli `WHERE id = X`) liczba odczytywanych stron z pamięci podręcznej pozostaje minimalna i zbliżona do zwykłego indeksu nieklastrowego. Główny zysk z klastrowania w PostgreSQL jest widoczny przy zapytaniach zakresowych, ponieważ eliminuje ono losowy dostęp do stron (random I/O) – dane leżące obok siebie w indeksie leżą też obok siebie na dysku.
+
+> ![](images/1-5.png)
+**Rozmiar i struktura indeksu:**
+Ostatni zrzut prezentuje fizyczny rozmiar, jaki utworzony indeks `ix_bt_id` zajmuje na dysku. Pokazuje to tzw. narzut pamięciowy (storage overhead) indeksowania. Chociaż indeks B-Tree zapewnia błyskawiczny dostęp do danych, wymaga dodatkowego miejsca w pamięci masowej (zazwyczaj od kilkunastu do kilkudziesięciu procent rozmiaru samej tabeli), co jest klasycznym kompromisem w bazach danych pomiędzy szybkością zapytań a zużyciem dysku.
 
 ```sql
 --  ...
 ```
+
+
+
 
 # Zadanie 2
 
@@ -472,12 +494,12 @@ where date >= '2019-01-01' and date <= '2019-01-31'
 ```
 
 > Wyniki:
+>
+> ![Brak indeksu na kolumnie date](images/2-1.png)
 
-```sql
---  ...
-```
+Brak zdefiniowanego indeksu na kolumnie date zmusza optymalizator PostgreSQL do wykonania operacji Seq Scan (Sequential Scan) na całej tabeli liczącej 2.3 mln wierszy. Silnik bazy danych musi odczytać z dysku lub pamięci RAM każdą stronę tabeli, aby przefiltrować wiersze spełniające warunek zakresu. Skutkuje to bardzo wysoką liczbą operacji wejścia/wyjścia (shared read / shared hit) oraz najdłuższym czasem wykonania zapytania.
 
-### 2) Indeks
+### 2) Indeks nieklastrowy na kolumnie date
 
 ```sql
 create index ix_ph_date
@@ -494,21 +516,22 @@ where date >= '2019-01-01' and date <= '2019-01-31'
 ```
 
 > Wyniki:
+>
+> ![Indeks nieklastrowy na date](images/2-2.png)
 
-```sql
---  ...
-```
+Utworzenie standardowego indeksu B-Tree (ix_ph_date) pozwala na zmianę planu zapytania. Optymalizator wykorzystuje operację Bitmap Index Scan (lub Index Scan). Baza najpierw szybko lokalizuje pasujące wiersze w strukturze indeksu, a następnie za pomocą operacji Bitmap Heap Scan sięga do fizycznych stron tabeli (tzw. Heap) po pozostałe kolumny wymagane w klauzuli SELECT (productid, productname, value). Czas wykonania zapytania oraz liczba odczytanych stron drastycznie spadają w porównaniu do pełnego skanowania.
 
-### 3) Indeks pokrywający
+### 3) Indeks pokrywający (INCLUDE)
 
-usuń indeks stworzony w pkt 1)
+Usuń indeks stworzony w pkt 2)
 
-stwórz indeks pokrywający (include)
+Stwórz indeks pokrywający:
 
 ```sql
 create index ix_ph_date_incl
 on product_history (date) include(productid, productname, value);
 
+-- usunięcie indeksu
 drop index ix_ph_date_incl on product_history;
 ```
 
@@ -519,36 +542,42 @@ where date >= '2019-01-01' and date <= '2019-01-31'
 ```
 
 > Wyniki:
+>
+> ![Indeks pokrywający – zapytanie selektywne](images/2-3.png)
+
+Dzięki zastosowaniu klauzuli INCLUDE stworzyliśmy tzw. indeks pokrywający. Ponieważ indeks przechowuje w swojej strukturze nie tylko klucz (date), ale również wszystkie pozostałe kolumny wymienione w zapytaniu, optymalizator PostgreSQL decyduje się na operację Index Only Scan. Silnik bazy danych pobiera komplet danych bezpośrednio z pliku indeksu i w ogóle nie musi odwoływać się do fizycznych stron tabeli. Daje to najniższą możliwą liczbę odczytów stron pamięci oraz najwyższą wydajność.
+
+---
+
+**Zapytanie `SELECT *`** – styczeń 2019 i cały rok 2019
 
 ```sql
---  ...
-```
-
-zapytanie `select *`
-
-- styczeń 2019
-
-```sql
+-- styczeń 2019
 select *
 from product_history
 where date >= '2019-01-01' and date <= '2019-01-31'
-```
 
-- cały rok 2019
 
-```sql
+-- cały rok 2019
 select *
 from product_history
 where date >= '2019-01-01' and date <= '2019-12-31'
 ```
 
 > Wyniki:
+>
+> ![SELECT * – styczeń 2019](images/2-4.png)
 
-```sql
---  ...
-```
+W przypadku zapytania SELECT * dla krótkiego okresu (styczeń), indeks pokrywający przestaje w pełni "pokrywać" zapytanie, ponieważ tabela product_history zawiera więcej kolumn (np. id lub categoryid), których nie dołączyliśmy do klauzuli INCLUDE. PostgreSQL nie może wykonać wydajnego Index Only Scan – zamiast tego używa indeksu do filtracji, ale ponownie musi wykonać skok do stron tabeli (Bitmap Heap Scan), aby pobrać brakujące kolumny.
+ 
+> ![SELECT * – cały rok 2019](images/2-5.png)
 
-a gdyby nie było tego indeksu pokrywającego
+Po rozszerzeniu zakresu filtra na cały rok 2019, selektywność zapytania gwałtownie spada – liczba zwracanych wierszy stanowi duży procent całej tabeli. Koszt operacji polegającej na odczytaniu indeksu, a następnie wielokrotnym skakaniu po losowych stronach tabeli (w celu pobrania wszystkich kolumn przez SELECT *) przewyższa koszt sekwencyjnego odczytu. Optymalizator celowo ignoruje istniejący indeks pokrywający i powraca do pełnego skanowania tabeli (Seq Scan), co jest w tej sytuacji najbardziej opłacalne.
+
+
+---
+
+**Gdyby nie było indeksu pokrywającego**
 
 ```sql
 drop index ix_ph_date_incl on product_history;
@@ -561,12 +590,11 @@ where date >= '2019-01-01' and date <= '2019-01-31'
 ```
 
 > Wyniki:
+> ![Gdyby nie było indeksu pokrywającego](images/2-6.png)
 
-```sql
---  ...
-```
+Usunięcie indeksu pokrywającego przy jednoczesnym braku podstawowego indeksu na kolumnie date pozbawia optymalizator jakichkolwiek narzędzi wspierających filtrowanie po czasie. Silnik bazy danych zostaje natychmiast zmuszony do powrotu do operacji Seq Scan. Efektywność zapytania wraca do punktu wyjścia (wysoki koszt czasowy i wysokie obciążenie I/O dla 2.3 mln rekordów).
 
-### 3) zapytanie wykorzystujące funkcje
+### 4) Zapytanie wykorzystujące funkcje
 
 ```sql
 select date, productid, productname, value
@@ -574,14 +602,12 @@ from product_history
 where year(date) = 2019 and month(date) = 1
 ```
 
-Czy indeks został użyty? Skomentuj sytuację
+Czy indeks został użyty? Skomentuj sytuację.
 
 > Wyniki:
+> ![Zapytanie wykorzystujące funkcje](images/2-7.png)
 
-```sql
---  ...
-```
-
+Mimo że na kolumnie date istnieje indeks, zastosowanie na niej funkcji (w PostgreSQL jest to zazwyczaj EXTRACT lub date_part) uniemożliwia optymalizatorowi jego użycie. Tradycyjny indeks B-Tree przechowuje czyste wartości dat, a nie wyniki operacji matematycznych czy wyciągania części składowych. Silnik bazy danych nie jest w stanie dopasować warunku bez uprzedniego obliczenia funkcji dla każdego wiersza w tabeli, co skutkuje całkowitym zignorowaniem indeksu i wymuszeniem pełnego skanowania tabeli (Seq Scan). Rozwiązaniem tego problemu byłoby dopiero stworzenie indeksu opartego na wyrażeniu (indeksu funkcyjnego).
 # Zadanie 3
 
 Baza Northwind3
@@ -664,6 +690,12 @@ where unitprice > cav.av
 ```
 
 > Wyniki:
+> ![](images/3-pg-1.png)
+> W tym wariancie optymalizator PostgreSQL zmuszony jest do wykonania "Nested Loop" dla każdego wiersza tabeli products. Ponieważ podzapytanie obliczające średnią (avg) jest skorelowane (zależne od zewnętrznej tabeli p), silnik musi przeliczać średnią dla każdej kategorii wielokrotnie. Jest to najbardziej nieefektywny sposób zapisu, co widać po wysokim koszcie całkowitym zapytania i dużej liczbie odczytów stron, mimo małego rozmiaru tabeli.
+> ![](images/3-pg-2.png)
+> Zastosowanie podzapytania w klauzuli FROM (zagnieżdżenie) pozwala optymalizatorowi na wcześniejsze przetworzenie danych, jednak w tym konkretnym przypadku zapytanie nadal zawiera skorelowany podselect wewnątrz. Choć struktura jest bardziej przejrzysta dla programisty, dla bazy danych koszt obliczeniowy pozostaje zbliżony do wariantu pierwszego. Silnik nadal wykonuje operację "Nested Loop" dla wierszy spełniających warunek, co generuje zauważalny narzut wydajnościowy przy większych zbiorach danych.
+> ![](images/3-pg-3.png)
+> To najbardziej optymalna forma zapisu. Zamiast skorelowanego podzapytania, użyliśmy złączenia (JOIN) z wcześniej przygotowaną (zagregowaną) tabelą tymczasową (CTE lub podzapytanie GROUP BY). Dzięki temu PostgreSQL oblicza średnie cen dla wszystkich kategorii tylko raz (Hash Aggregate), a następnie wykonuje złączenie (Hash Join). Widać wyraźny spadek kosztu i czasu wykonania – jest to preferowana metoda w pracy z relacyjnymi bazami danych, ponieważ minimalizuje liczbę operacji I/O.
 
 ```sql
 --  ...

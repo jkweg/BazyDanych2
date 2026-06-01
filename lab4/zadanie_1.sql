@@ -1,0 +1,1 @@
+SELECT pg_size_pretty(pg_relation_size('ix_bt_id')) AS rozmiar_indeksu;
